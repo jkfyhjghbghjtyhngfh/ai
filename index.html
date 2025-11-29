@@ -3,64 +3,30 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ChatGPT-5 — Local Demo</title>
-
-  <!-- Import map for potential libs (kept minimal) -->
-  <script type="importmap">
-  {
-    "imports": {
-      "nanoid": "https://cdn.jsdelivr.net/npm/nanoid/nanoid.js"
-    }
-  }
-  </script>
-
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
-
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="style.css" />
+  <title>AI Chat</title>
 </head>
 <body>
-  <main class="app">
-    <header class="app-header">
-      <div class="brand">
-        <div class="logo">5</div>
-        <div>
-          <h1>ChatGPT‑5 (Demo)</h1>
-          <p class="muted">Local interactive AI front-end — simulated responses</p>
-        </div>
-      </div>
-      <div class="controls">
-        <label class="small">Persona
-          <select id="persona">
-            <option value="default">Balanced</option>
-            <option value="concise">Concise</option>
-            <option value="creative">Creative</option>
-            <option value="expert">Expert</option>
-          </select>
-        </label>
-        <button id="clear" title="Clear chat">Clear</button>
-      </div>
-    </header>
-
-    <section id="chat" class="chat" aria-live="polite">
-      <!-- messages injected here -->
-      <div class="welcome">
-        <strong>Welcome to ChatGPT‑5 (demo)</strong>
-        <p>Type a message and press Enter. This demo simulates an advanced assistant locally — no server calls.</p>
-      </div>
+  <main id="app">
+    <section class="panel">
+      <div id="messages" class="messages" aria-live="polite"></div>
+      <form id="inputForm" class="input-row">
+        <textarea id="input" rows="1" placeholder="Say something..." aria-label="Message"></textarea>
+        <button id="send" type="submit" aria-label="Send">Send</button>
+      </form>
     </section>
-
-    <form id="composer" class="composer" autocomplete="off">
-      <textarea id="input" rows="1" placeholder="Ask anything... (Shift+Enter for newline)"></textarea>
-      <div class="composer-right">
-        <button type="button" id="tts" title="Speak response">🔊</button>
-        <button type="submit" id="send">Send</button>
+    <aside class="info">
+      <h3>AI Chat</h3>
+      <p>Converse with an AI. This demo uses the host's websim.chat API. Keep messages short.</p>
+      <div class="conversations">
+        <div class="conv-header">
+          <button id="newConv" type="button">New</button>
+          <button id="saveConv" type="button">Save</button>
+        </div>
+        <div id="convoList" class="convo-list" aria-live="polite"></div>
       </div>
-    </form>
-
-    <footer class="app-footer">
-      <small class="muted">This is a frontend-only simulation. For real AI, connect an API key or backend.</small>
-    </footer>
+      <button id="clear">Clear</button>
+    </aside>
   </main>
 
   <script type="module" src="app.js"></script>
