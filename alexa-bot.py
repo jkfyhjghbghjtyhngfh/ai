@@ -2,6 +2,8 @@ import pyttsx3
 import requests
 import json
 import re
+import threading
+import queue
 import os
 import sys
 import time
@@ -11,79 +13,92 @@ OLLAMA_URL = "http://localhost:11434/api/generate"
 RAW_URL = "https://raw.githubusercontent.com/jkfyhjghbghjtyhngfh/ai/main/alexa-bot.py"
 SELF_FILE = os.path.abspath(__file__)
 
-# ---------- CLEAN TEXT ----------
-def clean_text(text):
+# ---------- CLEAN ----------
+def clean(text):
     return re.sub(r'[^\x00-\x7F]+', '', text)
 
-# ---------- SPEAK (STABLE) ----------
-def speak(text):
-    text = clean_text(text)
+# ---------- TTS THREAD ----------
+speech_queue = queue.Queue()
 
-    engine = pyttsx3.init()  # fresh each time (prevents bugs)
+def tts_worker():
+    engine = pyttsx3.init()
     engine.setProperty('rate', 170)
 
     voices = engine.getProperty('voices')
-    engine.setProperty('voice', voices[1].id)
+    engine.setProperty('voice', voices[0].id)
 
-    engine.say(text)
-    engine.runAndWait()
-    engine.stop()
+    while True:
+        word = speech_queue.get()
+        if word is None:
+            break
 
-# ---------- OLLAMA STREAM ----------
+        word = clean(word)
+
+        if word.strip():
+            engine.say(word)
+            engine.runAndWait()
+
+# start TTS thread
+threading.Thread(target=tts_worker, daemon=True).start()
+
+# ---------- STREAM ----------
 def ask_ollama_stream(prompt):
     try:
         response = requests.post(OLLAMA_URL, json={
             "model": "gemma3:1b",
-            "prompt": "You are a helpful AI. Give detailed answers. No emojis.\n\nUser: " + prompt,
+            "prompt": "No emojis. Speak naturally.\n\nUser: " + prompt,
             "stream": True,
             "options": {
-                "num_predict": 500
+                "num_predict": 300
             }
         }, stream=True)
 
-        full = ""
-
         print("AI: ", end="", flush=True)
+
+        buffer = ""
 
         for line in response.iter_lines():
             if line:
                 data = json.loads(line.decode("utf-8"))
                 chunk = data.get("response", "")
+
                 print(chunk, end="", flush=True)
-                full += chunk
+                buffer += chunk
+
+                words = buffer.split(" ")
+                buffer = words[-1]
+
+                for word in words[:-1]:
+                    speech_queue.put(word)
 
         print()
-        return full
 
     except Exception as e:
         print("Ollama error:", e)
-        return ""
 
-# ---------- SELF UPDATE ----------
+# ---------- UPDATE ----------
 def update_self():
     try:
-        print("Updating from GitHub...")
+        print("Updating...")
         r = requests.get(RAW_URL)
         code = r.text
 
         if not code.strip():
-            speak("Update failed. File is empty.")
+            print("Empty update file.")
             return
 
         with open(SELF_FILE, "w", encoding="utf-8") as f:
             f.write(code)
 
-        speak("Update complete. Restarting.")
-
+        print("Restarting...")
         time.sleep(1)
         os.execv(sys.executable, [sys.executable, SELF_FILE])
 
     except Exception as e:
-        speak(f"Update failed: {e}")
-        print("Error:", e)
+        print("Update error:", e)
 
 # ---------- MAIN ----------
-print("Type: hey assistant <your message> (or 'exit' to quit)")
+print("Type: hey assistant <message> (or exit)")
 
 while True:
     try:
@@ -96,24 +111,20 @@ while True:
             command = text.replace("hey assistant", "").strip()
 
             if not command:
-                speak("Yes?")
+                speech_queue.put("yes")
                 continue
 
             if command == "/update":
                 update_self()
                 continue
 
-            reply = ask_ollama_stream(command)
-
-            # ONLY speak after fully done
-            if reply.strip():
-                speak(reply)
-            else:
-                print("No response to speak.")
+            ask_ollama_stream(command)
 
     except Exception as e:
         print("Error:", e)
 
-# ---------- KEEP WINDOW OPEN ----------
-print("\nAssistant ended. Press Enter to close.")
+# stop TTS thread
+speech_queue.put(None)
+
+print("\nPress Enter to close...")
 input()
