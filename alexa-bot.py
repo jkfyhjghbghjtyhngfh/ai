@@ -20,35 +20,35 @@ def clean(text):
 # ---------- SPEECH QUEUE ----------
 speech_queue = queue.Queue()
 
-# ---------- TTS WORKER ----------
-def tts_worker():
-    engine = pyttsx3.init()
-    engine.setProperty('rate', 170)
+# ---------- TTS ENGINE (GLOBAL) ----------
+engine = pyttsx3.init()
+engine.setProperty('rate', 170)
+voices = engine.getProperty('voices')
+engine.setProperty('voice', voices[0].id)
 
-    voices = engine.getProperty('voices')
-    engine.setProperty('voice', voices[0].id)
-
+# ---------- TTS LOOP ----------
+def tts_loop():
     while True:
         word = speech_queue.get()
-
         if word is None:
             break
 
         word = clean(word)
-
         if word.strip():
-            try:
-                engine.say(word)
-                engine.runAndWait()
-            except:
-                pass
+            engine.say(word)
 
         speech_queue.task_done()
 
-# start TTS thread
-threading.Thread(target=tts_worker, daemon=True).start()
+# run engine loop continuously
+def engine_loop():
+    while True:
+        engine.runAndWait()
 
-# ---------- STREAM + SPEAK ----------
+# start threads
+threading.Thread(target=tts_loop, daemon=True).start()
+threading.Thread(target=engine_loop, daemon=True).start()
+
+# ---------- STREAM ----------
 def ask_ollama_stream(prompt):
     try:
         response = requests.post(OLLAMA_URL, json={
@@ -72,20 +72,13 @@ def ask_ollama_stream(prompt):
                 print(chunk, end="", flush=True)
                 buffer += chunk
 
-                # split words + punctuation
-                words = re.findall(r'\b\w+\b|[.,!?]', buffer)
+                words = buffer.split(" ")
 
-                # keep incomplete last word
-                if not buffer.endswith((" ", ".", "!", "?")):
-                    buffer = words[-1]
-                    words = words[:-1]
-                else:
-                    buffer = ""
+                buffer = words[-1]
 
-                for word in words:
+                for word in words[:-1]:
                     speech_queue.put(word)
 
-        # flush leftover
         if buffer.strip():
             speech_queue.put(buffer)
 
@@ -97,12 +90,12 @@ def ask_ollama_stream(prompt):
 # ---------- UPDATE ----------
 def update_self():
     try:
-        print("Updating from GitHub...")
+        print("Updating...")
         r = requests.get(RAW_URL)
         code = r.text
 
         if not code.strip():
-            print("Update failed: empty file")
+            print("Empty update file.")
             return
 
         with open(SELF_FILE, "w", encoding="utf-8") as f:
@@ -141,7 +134,6 @@ while True:
     except Exception as e:
         print("Error:", e)
 
-# stop TTS thread
 speech_queue.put(None)
 
 print("\nPress Enter to close...")
