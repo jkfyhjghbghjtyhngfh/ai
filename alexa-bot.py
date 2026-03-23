@@ -17,9 +17,10 @@ SELF_FILE = os.path.abspath(__file__)
 def clean(text):
     return re.sub(r'[^\x00-\x7F]+', '', text)
 
-# ---------- TTS THREAD ----------
+# ---------- SPEECH QUEUE ----------
 speech_queue = queue.Queue()
 
+# ---------- TTS WORKER ----------
 def tts_worker():
     engine = pyttsx3.init()
     engine.setProperty('rate', 170)
@@ -29,19 +30,25 @@ def tts_worker():
 
     while True:
         word = speech_queue.get()
+
         if word is None:
             break
 
         word = clean(word)
 
         if word.strip():
-            engine.say(word)
-            engine.runAndWait()
+            try:
+                engine.say(word)
+                engine.runAndWait()
+            except:
+                pass
+
+        speech_queue.task_done()
 
 # start TTS thread
 threading.Thread(target=tts_worker, daemon=True).start()
 
-# ---------- STREAM ----------
+# ---------- STREAM + SPEAK ----------
 def ask_ollama_stream(prompt):
     try:
         response = requests.post(OLLAMA_URL, json={
@@ -65,11 +72,22 @@ def ask_ollama_stream(prompt):
                 print(chunk, end="", flush=True)
                 buffer += chunk
 
-                words = buffer.split(" ")
-                buffer = words[-1]
+                # split words + punctuation
+                words = re.findall(r'\b\w+\b|[.,!?]', buffer)
 
-                for word in words[:-1]:
+                # keep incomplete last word
+                if not buffer.endswith((" ", ".", "!", "?")):
+                    buffer = words[-1]
+                    words = words[:-1]
+                else:
+                    buffer = ""
+
+                for word in words:
                     speech_queue.put(word)
+
+        # flush leftover
+        if buffer.strip():
+            speech_queue.put(buffer)
 
         print()
 
@@ -79,12 +97,12 @@ def ask_ollama_stream(prompt):
 # ---------- UPDATE ----------
 def update_self():
     try:
-        print("Updating...")
+        print("Updating from GitHub...")
         r = requests.get(RAW_URL)
         code = r.text
 
         if not code.strip():
-            print("Empty update file.")
+            print("Update failed: empty file")
             return
 
         with open(SELF_FILE, "w", encoding="utf-8") as f:
