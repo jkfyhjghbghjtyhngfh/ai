@@ -4,6 +4,8 @@ import re
 import os
 import sys
 import datetime
+import time
+import subprocess
 
 import pyttsx3
 import spotipy
@@ -28,8 +30,8 @@ sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
 # ---------- SPEAK (FIXED) ----------
 def speak(text):
     import pyttsx3
-
     text = re.sub(r'[^\x00-\x7F]+', '', str(text))
+
     if not text.strip():
         return
 
@@ -56,9 +58,32 @@ def ask_ollama(prompt):
     except:
         return "AI error. Make sure Ollama is running."
 
+# ---------- AUTO OPEN SPOTIFY ----------
+def open_spotify():
+    try:
+        subprocess.Popen("start spotify", shell=True)
+    except:
+        pass
+
 # ---------- SPOTIFY ----------
 def play_song(query):
     try:
+        open_spotify()
+        time.sleep(3)  # wait for Spotify to open
+
+        devices = sp.devices()
+
+        if not devices['devices']:
+            speak("Waiting for Spotify device")
+            time.sleep(3)
+            devices = sp.devices()
+
+        if not devices['devices']:
+            speak("Still no device found. Open Spotify once manually.")
+            return
+
+        device_id = devices['devices'][0]['id']
+
         results = sp.search(q=query, limit=1, type='track')
 
         if results['tracks']['items']:
@@ -67,7 +92,7 @@ def play_song(query):
             name = track['name']
             artist = track['artists'][0]['name']
 
-            sp.start_playback(uris=[uri])
+            sp.start_playback(device_id=device_id, uris=[uri])
             speak(f"Playing {name} by {artist}")
         else:
             speak("Song not found")
@@ -100,33 +125,28 @@ def handle_command(cmd):
 
     cmd = cmd.lower().strip()
 
-    # exit
     if cmd == "exit":
         speak("Shutting down")
         sys.exit()
 
-    # update
     if cmd == "/update":
         update_self()
         return
 
-    # time
     if "time" in cmd:
         now = datetime.datetime.now().strftime("%H:%M")
         speak(f"The time is {now}")
         return
 
-    # name
     if "your name" in cmd:
         speak("I am your assistant")
         return
 
-    # greeting
     if "hi" in cmd:
         speak("Hello")
         return
 
-    # ---------- SPOTIFY COMMANDS ----------
+    # ---------- SPOTIFY ----------
     if cmd.startswith("play "):
         song = cmd.replace("play ", "")
         play_song(song)
