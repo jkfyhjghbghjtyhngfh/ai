@@ -1,5 +1,4 @@
 import requests
-import json
 import re
 import os
 import sys
@@ -27,9 +26,10 @@ sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
     scope="user-read-playback-state,user-modify-playback-state"
 ))
 
-# ---------- SPEAK (FIXED) ----------
+# ---------- SPEAK ----------
 def speak(text):
     import pyttsx3
+
     text = re.sub(r'[^\x00-\x7F]+', '', str(text))
 
     if not text.strip():
@@ -58,81 +58,85 @@ def ask_ollama(prompt):
     except:
         return "AI error. Make sure Ollama is running."
 
-# ---------- AUTO OPEN SPOTIFY ----------
-def open_spotify():
-    try:
-        subprocess.Popen("start spotify", shell=True)
-    except:
-        pass
-
-# ---------- SPOTIFY ----------
+# ---------- SPOTIFY PLAY ----------
 def play_song(query):
     try:
-        open_spotify()
-        time.sleep(3)  # wait for Spotify to open
+        subprocess.Popen("start spotify", shell=True)
+        time.sleep(5)
 
-        devices = sp.devices()
+        devices = sp.devices()['devices']
 
-        if not devices['devices']:
-            speak("Waiting for Spotify device")
-            time.sleep(3)
-            devices = sp.devices()
-
-        if not devices['devices']:
-            speak("Still no device found. Open Spotify once manually.")
+        if not devices:
+            speak("No Spotify device found")
             return
 
-        device_id = devices['devices'][0]['id']
+        device_id = devices[0]['id']
+
+        sp.transfer_playback(device_id=device_id, force_play=True)
+
+        time.sleep(1)
 
         results = sp.search(q=query, limit=1, type='track')
 
-        if results['tracks']['items']:
-            track = results['tracks']['items'][0]
-            uri = track['uri']
-            name = track['name']
-            artist = track['artists'][0]['name']
-
-            sp.start_playback(device_id=device_id, uris=[uri])
-            speak(f"Playing {name} by {artist}")
-        else:
+        if not results['tracks']['items']:
             speak("Song not found")
+            return
+
+        track = results['tracks']['items'][0]
+
+        sp.start_playback(
+            device_id=device_id,
+            uris=[track['uri']]
+        )
+
+        speak(f"Playing {track['name']}")
 
     except Exception as e:
         speak("Spotify error")
         print(e)
 
-# ---------- UPDATE ----------
-def update_self():
-    url = "https://raw.githubusercontent.com/jkfyhjghbghjtyhngfh/ai/main/alexa-bot.py"
-
-    speak("Updating system")
-
-    try:
-        r = requests.get(url)
-
-        if r.text.strip():
-            with open(SELF_FILE, "w", encoding="utf-8") as f:
-                f.write(r.text)
-
-            speak("Update complete. Restarting.")
-            os.execv(sys.executable, [sys.executable, SELF_FILE])
-
-    except:
-        speak("Update failed.")
-
-# ---------- COMMAND HANDLER ----------
+# ---------- COMMAND HANDLER (FIXED ORDER) ----------
 def handle_command(cmd):
 
     cmd = cmd.lower().strip()
+    cmd = re.sub(r'\s+', ' ', cmd)
 
+    # ---------- EXIT ----------
     if cmd == "exit":
         speak("Shutting down")
         sys.exit()
 
-    if cmd == "/update":
-        update_self()
+    # ---------- SPOTIFY (MUST BE FIRST) ----------
+    if cmd in ["pause music", "pause song"]:
+        try:
+            sp.pause_playback()
+            speak("Paused")
+        except:
+            speak("No music playing")
         return
 
+    if cmd in ["resume music", "play music"]:
+        try:
+            sp.start_playback()
+            speak("Resuming")
+        except:
+            speak("Nothing to resume")
+        return
+
+    if cmd in ["stop music", "turn off music", "stop song"]:
+        try:
+            sp.pause_playback()
+            speak("Stopped")
+        except:
+            speak("No music playing")
+        return
+
+    if cmd.startswith("play "):
+        song = cmd.replace("play ", "", 1)
+        play_song(song)
+        return
+
+    # ---------- OTHER COMMANDS ----------
     if "time" in cmd:
         now = datetime.datetime.now().strftime("%H:%M")
         speak(f"The time is {now}")
@@ -146,33 +150,12 @@ def handle_command(cmd):
         speak("Hello")
         return
 
-    # ---------- SPOTIFY ----------
-    if cmd.startswith("play "):
-        song = cmd.replace("play ", "")
-        play_song(song)
-        return
-
-    if "pause music" in cmd:
-        sp.pause_playback()
-        speak("Paused")
-        return
-
-    if "resume music" in cmd:
-        sp.start_playback()
-        speak("Resuming")
-        return
-
-    if "next song" in cmd:
-        sp.next_track()
-        speak("Skipping")
-        return
-
-    # ---------- AI ----------
+    # ---------- AI FALLBACK ----------
     speak("Thinking")
     reply = ask_ollama(cmd)
     speak(reply)
 
-# ---------- MAIN ----------
+# ---------- MAIN LOOP ----------
 print("Type: hey assistant <message>")
 speak("System online")
 
