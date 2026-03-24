@@ -5,29 +5,44 @@ import os
 import sys
 import datetime
 
+import pyttsx3
+import spotipy
+from spotipy.oauth2 import SpotifyOAuth
+
 # ---------- CONFIG ----------
 OLLAMA_URL = "http://localhost:11434/api/generate"
 SELF_FILE = os.path.abspath(__file__)
 
-# ---------- SPEAK (FIXED - NO FREEZING) ----------
+# ---------- SPOTIFY CONFIG ----------
+SPOTIPY_CLIENT_ID = "YOUR_CLIENT_ID"
+SPOTIPY_CLIENT_SECRET = "YOUR_CLIENT_SECRET"
+SPOTIPY_REDIRECT_URI = "http://127.0.0.1:8888/callback"
+
+sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
+    client_id=SPOTIPY_CLIENT_ID,
+    client_secret=SPOTIPY_CLIENT_SECRET,
+    redirect_uri=SPOTIPY_REDIRECT_URI,
+    scope="user-read-playback-state,user-modify-playback-state"
+))
+
+# ---------- SPEAK (FIXED) ----------
 def speak(text):
     import pyttsx3
 
     text = re.sub(r'[^\x00-\x7F]+', '', str(text))
-
     if not text.strip():
         return
 
     print("Bot:", text)
 
-    engine = pyttsx3.init()   # 🔥 NEW ENGINE EVERY TIME (fixes freezing)
+    engine = pyttsx3.init()
     engine.setProperty('rate', 170)
 
     engine.say(text)
     engine.runAndWait()
     engine.stop()
 
-# ---------- AI (OLLAMA) ----------
+# ---------- AI ----------
 def ask_ollama(prompt):
     try:
         response = requests.post(OLLAMA_URL, json={
@@ -41,7 +56,27 @@ def ask_ollama(prompt):
     except:
         return "AI error. Make sure Ollama is running."
 
-# ---------- SELF UPDATE ----------
+# ---------- SPOTIFY ----------
+def play_song(query):
+    try:
+        results = sp.search(q=query, limit=1, type='track')
+
+        if results['tracks']['items']:
+            track = results['tracks']['items'][0]
+            uri = track['uri']
+            name = track['name']
+            artist = track['artists'][0]['name']
+
+            sp.start_playback(uris=[uri])
+            speak(f"Playing {name} by {artist}")
+        else:
+            speak("Song not found")
+
+    except Exception as e:
+        speak("Spotify error")
+        print(e)
+
+# ---------- UPDATE ----------
 def update_self():
     url = "https://raw.githubusercontent.com/jkfyhjghbghjtyhngfh/ai/main/alexa-bot.py"
 
@@ -86,17 +121,38 @@ def handle_command(cmd):
         speak("I am your assistant")
         return
 
-    # hello
+    # greeting
     if "hi" in cmd:
-        speak("Hello! I am working properly now.")
+        speak("Hello")
         return
 
-    # AI fallback
+    # ---------- SPOTIFY COMMANDS ----------
+    if cmd.startswith("play "):
+        song = cmd.replace("play ", "")
+        play_song(song)
+        return
+
+    if "pause music" in cmd:
+        sp.pause_playback()
+        speak("Paused")
+        return
+
+    if "resume music" in cmd:
+        sp.start_playback()
+        speak("Resuming")
+        return
+
+    if "next song" in cmd:
+        sp.next_track()
+        speak("Skipping")
+        return
+
+    # ---------- AI ----------
     speak("Thinking")
     reply = ask_ollama(cmd)
     speak(reply)
 
-# ---------- MAIN LOOP ----------
+# ---------- MAIN ----------
 print("Type: hey assistant <message>")
 speak("System online")
 
