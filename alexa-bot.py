@@ -3,28 +3,31 @@ import json
 import re
 import os
 import sys
-
-import pyttsx3
+import datetime
 
 # ---------- CONFIG ----------
 OLLAMA_URL = "http://localhost:11434/api/generate"
 SELF_FILE = os.path.abspath(__file__)
 
-# ---------- TTS ----------
-engine = pyttsx3.init()
-engine.setProperty('rate', 170)
-
-voices = engine.getProperty('voices')
-engine.setProperty('voice', voices[0].id)
-
+# ---------- SPEAK (FIXED - NO FREEZING) ----------
 def speak(text):
-    text = re.sub(r'[^\x00-\x7F]+', '', str(text))
-    if text.strip():
-        print("Bot:", text)
-        engine.say(text)
-        engine.runAndWait()
+    import pyttsx3
 
-# ---------- AI ----------
+    text = re.sub(r'[^\x00-\x7F]+', '', str(text))
+
+    if not text.strip():
+        return
+
+    print("Bot:", text)
+
+    engine = pyttsx3.init()   # 🔥 NEW ENGINE EVERY TIME (fixes freezing)
+    engine.setProperty('rate', 170)
+
+    engine.say(text)
+    engine.runAndWait()
+    engine.stop()
+
+# ---------- AI (OLLAMA) ----------
 def ask_ollama(prompt):
     try:
         response = requests.post(OLLAMA_URL, json={
@@ -36,7 +39,7 @@ def ask_ollama(prompt):
         data = response.json()
         return data.get("response", "")
     except:
-        return "AI error."
+        return "AI error. Make sure Ollama is running."
 
 # ---------- SELF UPDATE ----------
 def update_self():
@@ -72,15 +75,20 @@ def handle_command(cmd):
         update_self()
         return
 
-    # built-in commands
+    # time
     if "time" in cmd:
-        import datetime
         now = datetime.datetime.now().strftime("%H:%M")
         speak(f"The time is {now}")
         return
 
+    # name
     if "your name" in cmd:
         speak("I am your assistant")
+        return
+
+    # hello
+    if "hi" in cmd:
+        speak("Hello! I am working properly now.")
         return
 
     # AI fallback
@@ -89,7 +97,7 @@ def handle_command(cmd):
     speak(reply)
 
 # ---------- MAIN LOOP ----------
-print("Type: hey assistant <message>  |  type exit to quit")
+print("Type: hey assistant <message>")
 speak("System online")
 
 while True:
@@ -99,7 +107,6 @@ while True:
         speak("Goodbye")
         break
 
-    # Alexa-style trigger
     if text.startswith("hey assistant"):
         cmd = text.replace("hey assistant", "").strip()
 
