@@ -14,8 +14,8 @@ OLLAMA_URL = "http://localhost:11434/api/generate"
 SELF_FILE = os.path.abspath(__file__)
 
 # ---------- SPOTIFY CONFIG ----------
-SPOTIPY_CLIENT_ID = "YOUR_CLIENT_ID"
-SPOTIPY_CLIENT_SECRET = "YOUR_CLIENT_SECRET"
+SPOTIPY_CLIENT_ID = "12a4b608e28142848fa2afa54d08606f"
+SPOTIPY_CLIENT_SECRET = "f35a99acbe164153852286d95260ea0a"
 SPOTIPY_REDIRECT_URI = "http://127.0.0.1:8888/callback"
 
 sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
