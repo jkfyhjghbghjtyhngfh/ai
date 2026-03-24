@@ -3,7 +3,6 @@ import json
 import re
 import os
 import sys
-import time
 
 import pyttsx3
 
@@ -19,63 +18,96 @@ voices = engine.getProperty('voices')
 engine.setProperty('voice', voices[0].id)
 
 def speak(text):
-    text = re.sub(r'[^\x00-\x7F]+', '', text)
+    text = re.sub(r'[^\x00-\x7F]+', '', str(text))
     if text.strip():
+        print("Bot:", text)
         engine.say(text)
         engine.runAndWait()
 
-# ---------- ASK AI (NO STREAMING) ----------
+# ---------- AI ----------
 def ask_ollama(prompt):
-    response = requests.post(OLLAMA_URL, json={
-        "model": "gemma3:1b",
-        "prompt": "No emojis. Respond clearly.\n\nUser: " + prompt,
-        "stream": False
-    })
+    try:
+        response = requests.post(OLLAMA_URL, json={
+            "model": "gemma3:1b",
+            "prompt": "No emojis. Be short and clear.\n\nUser: " + prompt,
+            "stream": False
+        })
 
-    data = response.json()
-    return data.get("response", "")
+        data = response.json()
+        return data.get("response", "")
+    except:
+        return "AI error."
 
-# ---------- UPDATE ----------
+# ---------- SELF UPDATE ----------
 def update_self():
     url = "https://raw.githubusercontent.com/jkfyhjghbghjtyhngfh/ai/main/alexa-bot.py"
 
-    print("Updating...")
-    r = requests.get(url)
+    speak("Updating system")
 
-    if r.text.strip():
-        with open(SELF_FILE, "w", encoding="utf-8") as f:
-            f.write(r.text)
+    try:
+        r = requests.get(url)
 
-        print("Restarting...")
-        os.execv(sys.executable, [sys.executable, SELF_FILE])
+        if r.text.strip():
+            with open(SELF_FILE, "w", encoding="utf-8") as f:
+                f.write(r.text)
 
-# ---------- MAIN ----------
-print("Type: hey assistant <message>")
+            speak("Update complete. Restarting.")
+            os.execv(sys.executable, [sys.executable, SELF_FILE])
+
+    except:
+        speak("Update failed.")
+
+# ---------- COMMAND HANDLER ----------
+def handle_command(cmd):
+
+    cmd = cmd.lower().strip()
+
+    # exit
+    if cmd == "exit":
+        speak("Shutting down")
+        sys.exit()
+
+    # update
+    if cmd == "/update":
+        update_self()
+        return
+
+    # built-in commands
+    if "time" in cmd:
+        import datetime
+        now = datetime.datetime.now().strftime("%H:%M")
+        speak(f"The time is {now}")
+        return
+
+    if "your name" in cmd:
+        speak("I am your assistant")
+        return
+
+    # AI fallback
+    speak("Thinking")
+    reply = ask_ollama(cmd)
+    speak(reply)
+
+# ---------- MAIN LOOP ----------
+print("Type: hey assistant <message>  |  type exit to quit")
+speak("System online")
 
 while True:
     text = input("You: ").strip().lower()
 
     if text == "exit":
+        speak("Goodbye")
         break
 
+    # Alexa-style trigger
     if text.startswith("hey assistant"):
         cmd = text.replace("hey assistant", "").strip()
 
-        if not cmd:
-            speak("Yes")
+        if cmd == "":
+            speak("Yes?")
             continue
 
-        if cmd == "/update":
-            update_self()
-            continue
+        handle_command(cmd)
 
-        print("AI thinking...")
-
-        reply = ask_ollama(cmd)
-
-        print("AI:", reply)
-
-        speak(reply)
-
-print("Press Enter to close...")
-input()
+    else:
+        speak("Say 'hey assistant' first")
